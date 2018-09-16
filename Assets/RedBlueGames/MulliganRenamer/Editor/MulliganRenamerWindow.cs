@@ -508,12 +508,42 @@ namespace RedBlueGames.MulliganRenamer
             var operationStyle = new GUIStyle("ScriptText");
             GUI.Box(headerRect, "", operationStyle);
             var headerStyle = new GUIStyle(EditorStyles.boldLabel);
-            headerStyle.alignment = TextAnchor.MiddleCenter;
-            EditorGUI.LabelField(headerRect, "Rename Operations", headerStyle);
+            headerStyle.alignment = TextAnchor.MiddleLeft;
+            var headerLabelRect = new Rect(headerRect);
+            headerLabelRect.x += 2.0f;
+            headerLabelRect.width -= 2.0f;
+            EditorGUI.LabelField(headerLabelRect, "Rename Operations", headerStyle);
+
+            var presetButtonsRect = new Rect(headerRect);
+            presetButtonsRect.width = 60.0f;
+            presetButtonsRect.x = headerRect.width - presetButtonsRect.width;
+            presetButtonsRect.y += 1.0f;
+            presetButtonsRect.height -= 2.0f;
+            if (GUI.Button(presetButtonsRect, "Presets", EditorStyles.toolbarDropDown))
+            {
+                var menu = new GenericMenu();
+                var stubSavedOps = new string[] {
+                    "Remove Numbers",
+                    "Alphabet Count",
+                    "NESW"
+                };
+
+                foreach (var op in stubSavedOps)
+                {
+                    var content = new GUIContent(op);
+                    menu.AddItem(content, false, () => Debug.Log("Pick" + op));
+                }
+
+                menu.AddSeparator(string.Empty);
+                menu.AddItem(new GUIContent("Save Preset..."), false, () => this.ShowSavePresetWindow());
+                menu.AddItem(new GUIContent("Manage Presets..."), false, () => this.ShowManagePresetsWindow());
+
+                menu.ShowAsContext();
+            }
 
             // The border on the header's box doesn't show, so add one to the y to reveal it
             var scrollAreaRect = new Rect(operationPanelRect);
-            scrollAreaRect.y += headerRect.height + 1;
+            scrollAreaRect.y += headerRect.height + 1.0f;
             scrollAreaRect.height -= headerRect.height + 1;
 
             var buttonSize = new Vector2(150.0f, 20.0f);
@@ -556,6 +586,22 @@ namespace RedBlueGames.MulliganRenamer
             }
 
             GUI.EndScrollView();
+        }
+
+        private void ShowSavePresetWindow()
+        {
+            var windowMinSize = new Vector2(250.0f, 40.0f);
+            var savePresetPosition = new Rect(this.position);
+            savePresetPosition.size = windowMinSize;
+            savePresetPosition.x = this.position.x + (this.position.xMax - this.position.xMin) / 2.0f;
+            savePresetPosition.y = this.position.y + (this.position.yMax - this.position.yMin) / 2.0f;
+            var window = EditorWindow.GetWindowWithRect<SavePresetWindow>(savePresetPosition, true, "Save Preset", true);
+            window.minSize = windowMinSize;
+        }
+
+        private void ShowManagePresetsWindow()
+        {
+            var window = EditorWindow.GetWindow<ManagePresetsWindow>(true, "Manage Presets", true);
         }
 
         private void DrawRenameOperations(Rect operationsRect)
