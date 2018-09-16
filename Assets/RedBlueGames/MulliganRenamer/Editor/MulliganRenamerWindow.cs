@@ -38,7 +38,6 @@ namespace RedBlueGames.MulliganRenamer
         private const string WindowMenuPath = "Window/Red Blue/Mulligan Renamer";
 
         private const string RenameOpsEditorPrefsKey = "RedBlueGames.MulliganRenamer.RenameOperationsToApply";
-        private const string RenameOpsEditorPrefsVersionTag = "[Version = 1]";
         private const string PreviewModePrefixKey = "RedBlueGames.MulliganRenamer.IsPreviewStepModePreference";
 
         private const float OperationPanelWidth = 350.0f;
@@ -505,41 +504,7 @@ namespace RedBlueGames.MulliganRenamer
 
             var headerRect = new Rect(operationPanelRect);
             headerRect.height = 18.0f;
-            var operationStyle = new GUIStyle("ScriptText");
-            GUI.Box(headerRect, "", operationStyle);
-            var headerStyle = new GUIStyle(EditorStyles.boldLabel);
-            headerStyle.alignment = TextAnchor.MiddleLeft;
-            var headerLabelRect = new Rect(headerRect);
-            headerLabelRect.x += 2.0f;
-            headerLabelRect.width -= 2.0f;
-            EditorGUI.LabelField(headerLabelRect, "Rename Operations", headerStyle);
-
-            var presetButtonsRect = new Rect(headerRect);
-            presetButtonsRect.width = 60.0f;
-            presetButtonsRect.x = headerRect.width - presetButtonsRect.width;
-            presetButtonsRect.y += 1.0f;
-            presetButtonsRect.height -= 2.0f;
-            if (GUI.Button(presetButtonsRect, "Presets", EditorStyles.toolbarDropDown))
-            {
-                var menu = new GenericMenu();
-                var stubSavedOps = new string[] {
-                    "Remove Numbers",
-                    "Alphabet Count",
-                    "NESW"
-                };
-
-                foreach (var op in stubSavedOps)
-                {
-                    var content = new GUIContent(op);
-                    menu.AddItem(content, false, () => Debug.Log("Pick" + op));
-                }
-
-                menu.AddSeparator(string.Empty);
-                menu.AddItem(new GUIContent("Save Preset..."), false, () => this.ShowSavePresetWindow());
-                menu.AddItem(new GUIContent("Manage Presets..."), false, () => this.ShowManagePresetsWindow());
-
-                menu.ShowAsContext();
-            }
+            this.DrawOperationsPanelHeader(headerRect);
 
             // The border on the header's box doesn't show, so add one to the y to reveal it
             var scrollAreaRect = new Rect(operationPanelRect);
@@ -586,6 +551,45 @@ namespace RedBlueGames.MulliganRenamer
             }
 
             GUI.EndScrollView();
+        }
+
+        private void DrawOperationsPanelHeader(Rect headerRect)
+        {
+            var operationStyle = new GUIStyle("ScriptText");
+            GUI.Box(headerRect, "", operationStyle);
+            var headerStyle = new GUIStyle(EditorStyles.boldLabel);
+            headerStyle.alignment = TextAnchor.MiddleLeft;
+            var headerLabelRect = new Rect(headerRect);
+            headerLabelRect.x += 2.0f;
+            headerLabelRect.width -= 2.0f;
+            EditorGUI.LabelField(headerLabelRect, "Rename Operations", headerStyle);
+
+            var presetButtonsRect = new Rect(headerRect);
+            presetButtonsRect.width = 60.0f;
+            presetButtonsRect.x = headerRect.width - presetButtonsRect.width;
+            presetButtonsRect.y += 1.0f;
+            presetButtonsRect.height -= 2.0f;
+            if (GUI.Button(presetButtonsRect, "Presets", EditorStyles.toolbarDropDown))
+            {
+                var menu = new GenericMenu();
+                var stubSavedOps = new string[] {
+                    "Remove Numbers",
+                    "Alphabet Count",
+                    "NESW"
+                };
+
+                foreach (var op in stubSavedOps)
+                {
+                    var content = new GUIContent(op);
+                    menu.AddItem(content, false, () => Debug.Log("Pick" + op));
+                }
+
+                menu.AddSeparator(string.Empty);
+                menu.AddItem(new GUIContent("Save Preset..."), false, () => this.ShowSavePresetWindow());
+                menu.AddItem(new GUIContent("Manage Presets..."), false, () => this.ShowManagePresetsWindow());
+
+                menu.ShowAsContext();
+            }
         }
 
         private void ShowSavePresetWindow()
@@ -767,55 +771,23 @@ namespace RedBlueGames.MulliganRenamer
                 operationSequence.Add(binding.Operation);
             }
 
-            var operationsSerialized = this.CreateSerializedStringForOperationSequence(operationSequence);
-            EditorPrefs.SetString(RenameOpsEditorPrefsKey, operationsSerialized);
-        }
-
-        private string CreateSerializedStringForOperationSequence(RenameOperationSequence<IRenameOperation> sequence)
-        {
-            var sequenceWithVersion = string.Format(
-                "{0}{1}",
-                RenameOpsEditorPrefsVersionTag,
-                sequence.ToSerializableString());
-            return sequenceWithVersion;
+            EditorPrefs.SetString(RenameOpsEditorPrefsKey, operationSequence.ToSerializableString());
         }
 
         private void LoadSavedRenameOperations()
         {
             var serializedOps = EditorPrefs.GetString(RenameOpsEditorPrefsKey, string.Empty);
-
-            // Versioning - convert old to new
-            var isValueCircaPreVersion = string.IsNullOrEmpty(serializedOps) || serializedOps[0] != '[';
-            if (isValueCircaPreVersion)
-            {
-                var ops = serializedOps.Split(',');
-                var operations = new RenameOperationSequence<IRenameOperation>();
-                foreach (var op in ops)
-                {
-                    foreach (var binding in this.RenameOperationDrawerBindingPrototypes)
-                    {
-                        if (binding.Drawer.MenuDisplayPath == op)
-                        {
-                            operations.Add(binding.Operation);
-                            break;
-                        }
-                    }
-                }
-
-                serializedOps = this.CreateSerializedStringForOperationSequence(operations);
-            }
-
             this.LoadSerializedOperationSequence(serializedOps);
         }
 
         private void LoadSerializedOperationSequence(string serializedOps)
         {
-            // Strip the version
-            serializedOps = serializedOps.Substring(
-                RenameOpsEditorPrefsVersionTag.Length,
-                serializedOps.Length - RenameOpsEditorPrefsVersionTag.Length);
+            var sequence = RenameOperationSequence<IRenameOperation>.FromString(serializedOps);
+            this.RenameOperationsToApplyWithBindings = new List<RenameOperationDrawerBinding>();
 
-            if (string.IsNullOrEmpty(serializedOps))
+            // When loading previously used operations, if there are none default to 
+            // open up with a ReplaceStringOperation. It's just more helpful to a new user.
+            if (sequence.Count == 0)
             {
                 var operation = new ReplaceStringOperation();
                 var drawer = new ReplaceStringOperationDrawer();
@@ -825,8 +797,6 @@ namespace RedBlueGames.MulliganRenamer
             }
             else
             {
-                var sequence = RenameOperationSequence<IRenameOperation>.FromString(serializedOps);
-                this.RenameOperationsToApplyWithBindings = new List<RenameOperationDrawerBinding>();
                 foreach (var op in sequence)
                 {
                     // Find the drawer that goes with this operation's type
@@ -839,11 +809,11 @@ namespace RedBlueGames.MulliganRenamer
                         }
                     }
                 }
+            }
 
-                if (this.NumRenameOperations > 0)
-                {
-                    this.FocusRenameOperationDeferred(this.RenameOperationsToApplyWithBindings.First().Operation);
-                }
+            if (this.NumRenameOperations > 0)
+            {
+                this.FocusRenameOperationDeferred(this.RenameOperationsToApplyWithBindings.First().Operation);
             }
         }
 
