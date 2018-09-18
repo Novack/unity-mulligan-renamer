@@ -23,6 +23,7 @@ SOFTWARE.
 
 namespace RedBlueGames.MulliganRenamer
 {
+    using System;
     using System.Collections;
     using System.Collections.Generic;
     using UnityEditor;
@@ -30,30 +31,77 @@ namespace RedBlueGames.MulliganRenamer
 
     public class ManagePresetsWindow : EditorWindow
     {
+        private List<RenameSequencePreset> presetsToDraw;
+
+        public event Action<int> PresetDeleted;
+
+        public event Action<int, string> PresetRenamed;
+
+        public void PopulateWithPresets(List<RenameSequencePreset> presets)
+        {
+            this.presetsToDraw = new List<RenameSequencePreset>(presets.Count);
+            foreach (var preset in presets)
+            {
+                var copySerialized = JsonUtility.ToJson(preset);
+                var copy = JsonUtility.FromJson<RenameSequencePreset>(copySerialized);
+                this.presetsToDraw.Add(copy);
+            }
+        }
+
+        private void OnEnable()
+        {
+            this.PresetDeleted += this.HandlePresetDeleted;
+            this.PresetRenamed += this.HandlePresetRenamed;
+        }
+
         private void OnGUI()
         {
-            var presets = new string[]
+            for (int i = 0; i < this.presetsToDraw.Count; ++i)
             {
-                "Remove Numbers",
-                "Add Count",
-                "NEWS"
-            };
-            for (int i = 0; i < presets.Length; ++i)
-            {
-                DrawPreset(presets[i]);
+                if (DrawPreset(i, presetsToDraw[i]))
+                {
+                    GUIUtility.ExitGUI();
+                    break;
+                }
             }
 
             GUILayout.Button("Restore Defaults");
         }
 
-        private bool DrawPreset(string presetName)
+        private bool DrawPreset(int index, RenameSequencePreset preset)
         {
             EditorGUILayout.BeginHorizontal();
-            GUILayout.Button("X", EditorStyles.miniButton, GUILayout.Width(18.0f));
-            EditorGUILayout.TextField(presetName);
+            if (GUILayout.Button("X", EditorStyles.miniButton, GUILayout.Width(18.0f)))
+            {
+                if (this.PresetDeleted != null)
+                {
+                    this.PresetDeleted(index);
+                    return true;
+                }
+            }
+
+            var newName = EditorGUILayout.TextField(preset.Name);
+            if (newName != preset.Name)
+            {
+                if (this.PresetRenamed != null)
+                {
+                    this.PresetRenamed(index, newName);
+                }
+            }
+
             EditorGUILayout.EndHorizontal();
 
             return false;
+        }
+
+        private void HandlePresetDeleted(int index)
+        {
+            this.presetsToDraw.RemoveAt(index);
+        }
+
+        private void HandlePresetRenamed(int index, string newName)
+        {
+            this.presetsToDraw[index].Name = newName;
         }
     }
 }

@@ -51,11 +51,6 @@
             this.savedPresets = new List<RenameSequencePreset>();
         }
 
-        public void AddUserPreset(RenameSequencePreset preset)
-        {
-            this.SavedPresets.Add(preset);
-        }
-
         public void OnBeforeSerialize()
         {
             this.serializedPreviousSequence = this.PreviousSequence.ToSerializableString();

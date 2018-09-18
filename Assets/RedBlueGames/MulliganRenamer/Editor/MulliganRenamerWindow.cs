@@ -581,15 +581,14 @@ namespace RedBlueGames.MulliganRenamer
                     savedPresetNames[i] = this.ActivePreferences.SavedPresets[i].Name;
                 }
 
-                for(int i = 0; i < savedPresetNames.Length; ++i)
+                for (int i = 0; i < savedPresetNames.Length; ++i)
                 {
                     var content = new GUIContent(savedPresetNames[i]);
                     int copyI = i;
-                    menu.AddItem(content, false, () => 
+                    menu.AddItem(content, false, () =>
                     {
-                        var preset = this.ActivePreferences.SavedPresets[copyI]; 
+                        var preset = this.ActivePreferences.SavedPresets[copyI];
                         this.LoadOperationSequence(preset.OperationSequence);
-                        Debug.Log("Pick:" + savedPresetNames[copyI]);
                     });
                 }
 
@@ -781,6 +780,9 @@ namespace RedBlueGames.MulliganRenamer
         private void ShowManagePresetsWindow()
         {
             var window = EditorWindow.GetWindow<ManagePresetsWindow>(true, "Manage Presets", true);
+            window.PopulateWithPresets(this.ActivePreferences.SavedPresets);
+            window.PresetDeleted += (i) => this.ActivePreferences.SavedPresets.RemoveAt(i);
+            window.PresetRenamed += (i, newName) => this.ActivePreferences.SavedPresets[i].Name = newName;
         }
 
         private void SaveUserPreferences()
@@ -852,7 +854,7 @@ namespace RedBlueGames.MulliganRenamer
 
         private void SaveNewPresetFromCurrentOperations(string presetName)
         {
-            this.ActivePreferences.AddUserPreset(
+            this.ActivePreferences.SavedPresets.Add(
                 this.CreatePresetFromCurrentSequence(presetName)
             );
         }
