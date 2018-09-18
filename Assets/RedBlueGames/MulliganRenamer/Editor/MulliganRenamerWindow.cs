@@ -38,6 +38,7 @@ namespace RedBlueGames.MulliganRenamer
         private const string WindowMenuPath = "Window/Red Blue/Mulligan Renamer";
 
         private const string RenameOpsEditorPrefsKey = "RedBlueGames.MulliganRenamer.RenameOperationsToApply";
+        private const string UserPreferencesPrefKey = "RedBlueGames.MulliganRenamer.UserPreferences";
         private const string PreviewModePrefixKey = "RedBlueGames.MulliganRenamer.IsPreviewStepModePreference";
 
         private const float OperationPanelWidth = 350.0f;
@@ -60,6 +61,8 @@ namespace RedBlueGames.MulliganRenamer
         private UniqueList<UnityEngine.Object> ObjectsToRename { get; set; }
 
         private List<RenameOperationDrawerBinding> RenameOperationsToApplyWithBindings { get; set; }
+
+        private MulliganUserPreferences ActivePreferences { get; set; }
 
         private int NumRenameOperations
         {
@@ -131,7 +134,7 @@ namespace RedBlueGames.MulliganRenamer
         [MenuItem(WindowMenuPath, false)]
         private static void ShowWindow()
         {
-            var bulkRenamerWindow = EditorWindow.GetWindow<MulliganRenamerWindow>(true, "Mulligan Renamer", true);
+            var bulkRenamerWindow = EditorWindow.GetWindow<MulliganRenamerWindow>(false, "Mulligan Renamer", true);
 
             // When they launch via right click, we immediately load the objects in.
             bulkRenamerWindow.LoadSelectedObjects();
@@ -191,7 +194,7 @@ namespace RedBlueGames.MulliganRenamer
             this.ObjectsToRename = new UniqueList<UnityEngine.Object>();
 
             this.CacheRenameOperationPrototypes();
-            this.LoadSavedRenameOperations();
+            this.LoadUserPreferences();
 
             this.BulkRenamer = new BulkRenamer();
             Selection.selectionChanged += this.Repaint;
@@ -254,7 +257,7 @@ namespace RedBlueGames.MulliganRenamer
 
         private void OnDisable()
         {
-            this.SaveRenameOperationsToPreferences();
+            this.SaveUserPreferences();
 
             Selection.selectionChanged -= this.Repaint;
             EditorApplication.update -= this.CacheBulkRenamerPreview;
@@ -572,40 +575,35 @@ namespace RedBlueGames.MulliganRenamer
             if (GUI.Button(presetButtonsRect, "Presets", EditorStyles.toolbarDropDown))
             {
                 var menu = new GenericMenu();
-                var stubSavedOps = new string[] {
-                    "Remove Numbers",
-                    "Alphabet Count",
-                    "NESW"
-                };
-
-                foreach (var op in stubSavedOps)
+                var savedPresetNames = new string[this.ActivePreferences.SavedPresets.Count];
+                for (int i = 0; i < this.ActivePreferences.SavedPresets.Count; ++i)
                 {
-                    var content = new GUIContent(op);
-                    menu.AddItem(content, false, () => Debug.Log("Pick" + op));
+                    savedPresetNames[i] = this.ActivePreferences.SavedPresets[i].Name;
+                }
+
+                for(int i = 0; i < savedPresetNames.Length; ++i)
+                {
+                    var content = new GUIContent(savedPresetNames[i]);
+                    int copyI = i;
+                    menu.AddItem(content, false, () => 
+                    {
+                        var preset = this.ActivePreferences.SavedPresets[copyI]; 
+                        this.LoadOperationSequence(preset.OperationSequence);
+                        Debug.Log("Pick:" + savedPresetNames[copyI]);
+                    });
                 }
 
                 menu.AddSeparator(string.Empty);
                 menu.AddItem(new GUIContent("Save Preset..."), false, () => this.ShowSavePresetWindow());
                 menu.AddItem(new GUIContent("Manage Presets..."), false, () => this.ShowManagePresetsWindow());
+                menu.AddItem(new GUIContent("DEBUG: Delete all Prefs..."), false, () =>
+                {
+                    EditorPrefs.DeleteKey(UserPreferencesPrefKey);
+                    this.LoadUserPreferences();
+                });
 
                 menu.ShowAsContext();
             }
-        }
-
-        private void ShowSavePresetWindow()
-        {
-            var windowMinSize = new Vector2(250.0f, 40.0f);
-            var savePresetPosition = new Rect(this.position);
-            savePresetPosition.size = windowMinSize;
-            savePresetPosition.x = this.position.x + (this.position.xMax - this.position.xMin) / 2.0f;
-            savePresetPosition.y = this.position.y + (this.position.yMax - this.position.yMin) / 2.0f;
-            var window = EditorWindow.GetWindowWithRect<SavePresetWindow>(savePresetPosition, true, "Save Preset", true);
-            window.minSize = windowMinSize;
-        }
-
-        private void ShowManagePresetsWindow()
-        {
-            var window = EditorWindow.GetWindow<ManagePresetsWindow>(true, "Manage Presets", true);
         }
 
         private void DrawRenameOperations(Rect operationsRect)
@@ -693,7 +691,7 @@ namespace RedBlueGames.MulliganRenamer
 
                 if (saveOpsToPreferences)
                 {
-                    this.SaveRenameOperationsToPreferences();
+                    this.SaveUserPreferences();
                 }
             }
         }
@@ -722,7 +720,7 @@ namespace RedBlueGames.MulliganRenamer
             var binding = new RenameOperationDrawerBinding(renameOp, drawer);
             this.RenameOperationsToApplyWithBindings.Add(binding);
 
-            this.SaveRenameOperationsToPreferences();
+            this.SaveUserPreferences();
 
             // Scroll to the bottom to focus the newly created operation.
             this.ScrollRenameOperationsToBottom();
@@ -763,7 +761,29 @@ namespace RedBlueGames.MulliganRenamer
             this.previewPanelScrollPosition = this.previewPanel.Draw(previewPanelRect, this.previewPanelScrollPosition, bulkRenamePreview);
         }
 
-        private void SaveRenameOperationsToPreferences()
+        private void ShowSavePresetWindow()
+        {
+            var windowMinSize = new Vector2(250.0f, 40.0f);
+            var savePresetPosition = new Rect(this.position);
+            savePresetPosition.size = windowMinSize;
+            savePresetPosition.x = this.position.x + (this.position.xMax - this.position.xMin) / 2.0f;
+            savePresetPosition.y = this.position.y + (this.position.yMax - this.position.yMin) / 2.0f;
+            var window = EditorWindow.GetWindowWithRect<SavePresetWindow>(savePresetPosition, true, "Save Preset", true);
+            window.minSize = windowMinSize;
+            window.PresetSaved += this.HandlePresetSaved;
+        }
+
+        private void HandlePresetSaved(string presetName)
+        {
+            this.SaveNewPresetFromCurrentOperations(presetName);
+        }
+
+        private void ShowManagePresetsWindow()
+        {
+            var window = EditorWindow.GetWindow<ManagePresetsWindow>(true, "Manage Presets", true);
+        }
+
+        private void SaveUserPreferences()
         {
             var operationSequence = new RenameOperationSequence<IRenameOperation>();
             foreach (var binding in this.RenameOperationsToApplyWithBindings)
@@ -771,42 +791,55 @@ namespace RedBlueGames.MulliganRenamer
                 operationSequence.Add(binding.Operation);
             }
 
-            EditorPrefs.SetString(RenameOpsEditorPrefsKey, operationSequence.ToSerializableString());
+            this.ActivePreferences.PreviousSequence = operationSequence;
+
+            EditorPrefs.SetString(UserPreferencesPrefKey, JsonUtility.ToJson(this.ActivePreferences));
         }
 
-        private void LoadSavedRenameOperations()
+        private void LoadUserPreferences()
         {
-            var serializedOps = EditorPrefs.GetString(RenameOpsEditorPrefsKey, string.Empty);
-            this.LoadSerializedOperationSequence(serializedOps);
-        }
-
-        private void LoadSerializedOperationSequence(string serializedOps)
-        {
-            var sequence = RenameOperationSequence<IRenameOperation>.FromString(serializedOps);
-            this.RenameOperationsToApplyWithBindings = new List<RenameOperationDrawerBinding>();
-
-            // When loading previously used operations, if there are none default to 
-            // open up with a ReplaceStringOperation. It's just more helpful to a new user.
-            if (sequence.Count == 0)
+            var oldSerializedOps = EditorPrefs.GetString(RenameOpsEditorPrefsKey, string.Empty);
+            if (!string.IsNullOrEmpty(oldSerializedOps))
             {
-                var operation = new ReplaceStringOperation();
-                var drawer = new ReplaceStringOperationDrawer();
-                drawer.SetModel(operation);
-                var binding = new RenameOperationDrawerBinding(operation, drawer);
-                this.RenameOperationsToApplyWithBindings.Add(binding);
+                // Update operations to the new preferences
+                this.ActivePreferences = new MulliganUserPreferences()
+                {
+                    PreviousSequence = RenameOperationSequence<IRenameOperation>.FromString(oldSerializedOps)
+                };
+
+                EditorPrefs.DeleteKey(RenameOpsEditorPrefsKey);
             }
             else
             {
-                foreach (var op in sequence)
+                var serializedPreferences = EditorPrefs.GetString(UserPreferencesPrefKey, string.Empty);
+
+                if (!string.IsNullOrEmpty(serializedPreferences))
                 {
-                    // Find the drawer that goes with this operation's type
-                    foreach (var drawerBinding in this.RenameOperationDrawerBindingPrototypes)
+                    var loadedPreferences = JsonUtility.FromJson<MulliganUserPreferences>(serializedPreferences);
+                    this.ActivePreferences = loadedPreferences;
+                }
+                else
+                {
+                    this.ActivePreferences = new MulliganUserPreferences();
+                }
+            }
+
+            this.LoadOperationSequence(this.ActivePreferences.PreviousSequence);
+        }
+
+        private void LoadOperationSequence(RenameOperationSequence<IRenameOperation> sequence)
+        {
+            this.RenameOperationsToApplyWithBindings = new List<RenameOperationDrawerBinding>();
+
+            foreach (var op in sequence)
+            {
+                // Find the drawer that goes with this operation's type
+                foreach (var drawerBinding in this.RenameOperationDrawerBindingPrototypes)
+                {
+                    if (drawerBinding.Operation.GetType() == op.GetType())
                     {
-                        if (drawerBinding.Operation.GetType() == op.GetType())
-                        {
-                            this.AddRenameOperation(new RenameOperationDrawerBinding(op, drawerBinding.Drawer));
-                            break;
-                        }
+                        this.AddRenameOperation(new RenameOperationDrawerBinding(op, drawerBinding.Drawer));
+                        break;
                     }
                 }
             }
@@ -815,6 +848,30 @@ namespace RedBlueGames.MulliganRenamer
             {
                 this.FocusRenameOperationDeferred(this.RenameOperationsToApplyWithBindings.First().Operation);
             }
+        }
+
+        private void SaveNewPresetFromCurrentOperations(string presetName)
+        {
+            this.ActivePreferences.AddUserPreset(
+                this.CreatePresetFromCurrentSequence(presetName)
+            );
+        }
+
+        private RenameSequencePreset CreatePresetFromCurrentSequence(string presetName)
+        {
+            var operationSequence = new RenameOperationSequence<IRenameOperation>();
+            foreach (var binding in this.RenameOperationsToApplyWithBindings)
+            {
+                operationSequence.Add(binding.Operation);
+            }
+
+            var preset = new RenameSequencePreset()
+            {
+                Name = presetName,
+                OperationSequence = operationSequence
+            };
+
+            return preset;
         }
 
         private void FocusRenameOperationDeferred(IRenameOperation renameOperation)

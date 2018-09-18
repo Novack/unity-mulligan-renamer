@@ -23,6 +23,7 @@ SOFTWARE.
 
 namespace RedBlueGames.MulliganRenamer
 {
+    using System;
     using System.Collections;
     using System.Collections.Generic;
     using UnityEditor;
@@ -30,16 +31,28 @@ namespace RedBlueGames.MulliganRenamer
 
     public class SavePresetWindow : EditorWindow
     {
+        public event Action<string> PresetSaved;
+
+        private string enteredName;
+
         private void OnGUI()
         {
             var presetFieldName = "SavePresetField";
             GUI.SetNextControlName(presetFieldName);
-            EditorGUILayout.TextField(string.Empty);
+            this.enteredName = EditorGUILayout.TextField(this.enteredName);
 
             GUI.FocusControl(presetFieldName);
             EditorGUI.FocusTextInControl(presetFieldName);
 
-            GUILayout.Button("Save");
+            if (GUILayout.Button("Save"))
+            {
+                if (this.PresetSaved != null)
+                {
+                    this.PresetSaved.Invoke(this.enteredName);
+                }
+
+                this.Close();
+            };
         }
     }
 }
